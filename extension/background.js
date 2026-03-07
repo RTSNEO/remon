@@ -65,7 +65,35 @@ async function startExecutionLoop() {
 
       // A. Get Page Context
       log('Extracting page context...', 'info');
-      const pageContext = await getPageContext(targetTabId);
+
+      let targetTab = null;
+      try {
+        targetTab = await chrome.tabs.get(targetTabId);
+      } catch (e) {
+        log('Target tab closed. Finding new active tab...', 'error');
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs.length > 0) targetTabId = tabs[0].id;
+        else {
+           stopAgent();
+           return;
+        }
+        targetTab = await chrome.tabs.get(targetTabId);
+      }
+
+      if (targetTab.status === 'loading') {
+        log('Target page is still loading. Waiting 3s...', 'info');
+        await sleep(3000);
+        continue;
+      }
+
+      let pageContext = null;
+      if (targetTab.url.startsWith('chrome://') || targetTab.url.startsWith('about:') || targetTab.url.startsWith('edge://')) {
+        log('Cannot scrape restricted browser pages.', 'error');
+        pageContext = `--- Visible Page Text snippet ---\nYou are currently on a restricted browser page (${targetTab.url}). You cannot click or type here. You MUST use the "navigate" action to go to a valid website (e.g. "https://www.google.com" or "https://www.linkedin.com") to proceed with the goal.`;
+      } else {
+         pageContext = await getPageContext(targetTabId);
+      }
+
       if (!pageContext) {
         log('Failed to extract page context. Waiting 5s before retry...', 'error');
         await sleep(5000);
@@ -78,7 +106,12 @@ async function startExecutionLoop() {
       const prompt = buildPrompt(currentGoal, pageContext);
       const geminiResponse = await askGemini(geminiTabId, prompt);
 
-      if (!geminiResponse || !isRunning) break;
+      if (!isRunning) break;
+      if (!geminiResponse) {
+        log('Failed to get Gemini response. Retrying...', 'error');
+        await sleep(5000);
+        continue;
+      }
 
       log(`Gemini raw response: ${geminiResponse}`, 'info');
 
@@ -140,8 +173,30 @@ function getPageContext(tabId) {
     // Send a message to content.js to extract DOM
     chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CONTEXT' }, (response) => {
       if (chrome.runtime.lastError) {
-        log(`Error communicating with target page: ${chrome.runtime.lastError.message}`, 'error');
-        resolve(null);
+        const errorMsg = chrome.runtime.lastError.message;
+        log(`Error communicating with target page: ${errorMsg}`, 'error');
+
+        // If the content script is missing, try to inject it
+        if (errorMsg.includes('Receiving end does not exist')) {
+            log('Content script missing. Injecting now...', 'info');
+            chrome.scripting.executeScript({
+               target: { tabId: tabId },
+               files: ['content.js']
+            }).then(() => {
+               // Wait a moment for script to initialize
+               setTimeout(() => {
+                 chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CONTEXT' }, (retryResponse) => {
+                    if (chrome.runtime.lastError) resolve(null);
+                    else resolve(retryResponse ? retryResponse.context : null);
+                 });
+               }, 1000);
+            }).catch((err) => {
+               log(`Injection failed: ${err.message}`, 'error');
+               resolve(null);
+            });
+        } else {
+            resolve(null);
+        }
       } else if (response && response.context) {
         resolve(response.context);
       } else {
@@ -198,12 +253,12 @@ function askGemini(tabId, prompt) {
          };
          chrome.runtime.onMessage.addListener(listener);
 
-         // Timeout after 30 seconds
+         // Timeout after 65 seconds to allow content script polling to finish
          setTimeout(() => {
            chrome.runtime.onMessage.removeListener(listener);
            log('Timeout waiting for Gemini response', 'error');
            resolve(null);
-         }, 30000);
+         }, 65000);
       } else {
          log('Failed to send prompt to Gemini UI.', 'error');
          resolve(null);
@@ -242,6 +297,16 @@ function parseGeminiResponse(responseText) {
 
 function executeAction(tabId, action) {
   return new Promise((resolve) => {
+    if (action.action === 'navigate' && action.url) {
+      chrome.tabs.update(tabId, { url: action.url }, () => {
+         if (chrome.runtime.lastError) {
+           log(`Navigate Action Error: ${chrome.runtime.lastError.message}`, 'error');
+         }
+         resolve({ status: 'success' });
+      });
+      return;
+    }
+
     chrome.tabs.sendMessage(tabId, { type: 'EXECUTE_ACTION', action }, (response) => {
       if (chrome.runtime.lastError) {
         log(`Execute Action Error: ${chrome.runtime.lastError.message}`, 'error');
