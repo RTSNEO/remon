@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Gemini Auto Browser Agent
 
 An autonomous web browsing agent powered by a local Gemini web session, implemented as a Chromium Manifest V3 Extension.
@@ -64,6 +65,8 @@ This project uses Playwright for End-to-End (E2E) testing to verify that the ext
 - **`content.js` (Target Page)**: Injected into all general websites `<all_urls>`. It maps interactive elements to unique IDs and executes the AI's requested interactions.
 - **`gemini.js` (AI Engine)**: Injected only into `https://gemini.google.com/`. It manipulates the DOM to insert prompts and polls for the completed, parsed AI response.
 =======
+=======
+>>>>>>> 42e3a88 (Update README with project details and instructions)
 A Chromium extension and agent that automates web browsing tasks using a local Gemini session.
 
 ## Features
@@ -86,4 +89,7 @@ A Chromium extension and agent that automates web browsing tasks using a local G
 - Install dependencies:
   ```bash
   npm install
+<<<<<<< HEAD
+>>>>>>> 42e3a88 (Update README with project details and instructions)
+=======
 >>>>>>> 42e3a88 (Update README with project details and instructions)
