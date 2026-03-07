@@ -2,7 +2,7 @@ const { test, expect, chromium } = require('@playwright/test');
 const path = require('path');
 
 test('Extension loads and Side Panel works', async () => {
-  const pathToExtension = path.join(__dirname, 'extension');
+  const pathToExtension = path.join(__dirname, '../extension');
   const userDataDir = '/tmp/test-user-data-dir';
 
   // Launch Chromium with the extension
