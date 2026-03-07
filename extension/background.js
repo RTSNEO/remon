@@ -235,35 +235,65 @@ What is your next action JSON?`;
 function askGemini(tabId, prompt) {
   return new Promise((resolve) => {
     log('Sending prompt to Gemini content script...', 'info');
-    chrome.tabs.sendMessage(tabId, { type: 'SEND_PROMPT', prompt }, (response) => {
-      if (chrome.runtime.lastError) {
-         log(`Error communicating with Gemini tab: ${chrome.runtime.lastError.message}`, 'error');
-         resolve(null);
-         return;
-      }
 
-      if (response && response.status === 'sent') {
-         // Now we need to wait for Gemini's response.
-         // We will set up a one-time listener for the result.
-         const listener = (message) => {
-           if (message.type === 'GEMINI_RESPONSE') {
-             chrome.runtime.onMessage.removeListener(listener);
-             resolve(message.text);
+    const sendPrompt = () => {
+      chrome.tabs.sendMessage(tabId, { type: 'SEND_PROMPT', prompt }, (response) => {
+        if (chrome.runtime.lastError) {
+           const errorMsg = chrome.runtime.lastError.message;
+           log(`Error communicating with Gemini tab: ${errorMsg}`, 'error');
+
+           // If the content script is missing, try to inject it
+           if (errorMsg.includes('Receiving end does not exist')) {
+              log('Gemini script missing. Injecting now...', 'info');
+              chrome.scripting.executeScript({
+                 target: { tabId: tabId },
+                 files: ['gemini.js']
+              }).then(() => {
+                 setTimeout(() => {
+                   chrome.tabs.sendMessage(tabId, { type: 'SEND_PROMPT', prompt }, handleResponse);
+                 }, 1000);
+              }).catch((err) => {
+                 log(`Gemini injection failed: ${err.message}`, 'error');
+                 resolve(null);
+              });
+           } else {
+              resolve(null);
            }
-         };
-         chrome.runtime.onMessage.addListener(listener);
+           return;
+        }
 
-         // Timeout after 65 seconds to allow content script polling to finish
-         setTimeout(() => {
-           chrome.runtime.onMessage.removeListener(listener);
-           log('Timeout waiting for Gemini response', 'error');
+        handleResponse(response);
+      });
+    };
+
+    const handleResponse = (response) => {
+        if (chrome.runtime.lastError) {
+            log(`Error in Gemini retry: ${chrome.runtime.lastError.message}`, 'error');
+            resolve(null);
+            return;
+        }
+
+        if (response && response.status === 'sent') {
+           const listener = (message) => {
+             if (message.type === 'GEMINI_RESPONSE') {
+               chrome.runtime.onMessage.removeListener(listener);
+               resolve(message.text);
+             }
+           };
+           chrome.runtime.onMessage.addListener(listener);
+
+           setTimeout(() => {
+             chrome.runtime.onMessage.removeListener(listener);
+             log('Timeout waiting for Gemini response', 'error');
+             resolve(null);
+           }, 65000);
+        } else {
+           log('Failed to send prompt to Gemini UI.', 'error');
            resolve(null);
-         }, 65000);
-      } else {
-         log('Failed to send prompt to Gemini UI.', 'error');
-         resolve(null);
-      }
-    });
+        }
+    };
+
+    sendPrompt();
   });
 }
 
