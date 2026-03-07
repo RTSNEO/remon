@@ -2,15 +2,16 @@
 
 let isProcessingPrompt = false;
 let lastMessageCount = 0;
+let pollInterval = null;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SEND_PROMPT') {
-    if (isProcessingPrompt) {
-       sendResponse({ status: 'busy' });
-       return;
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
     }
-
     isProcessingPrompt = true;
+
     sendPromptToGemini(message.prompt)
       .then(() => {
         sendResponse({ status: 'sent' });
@@ -31,8 +32,10 @@ async function sendPromptToGemini(promptText) {
     // The selector may change over time on Gemini. Common ones:
     // rich-textarea, .ql-editor, div[contenteditable="true"]
     const chatInput = document.querySelector('rich-textarea div[contenteditable="true"]') ||
+                      document.querySelector('div[data-placeholder="Ask Gemini"]') ||
                       document.querySelector('.ql-editor') ||
                       document.querySelector('div[aria-label="Message Gemini"]') ||
+                      document.querySelector('div[role="textbox"][contenteditable="true"]') ||
                       document.querySelector('textarea'); // Fallback
 
     if (!chatInput) {
@@ -58,30 +61,34 @@ async function sendPromptToGemini(promptText) {
 
     // 4. Find and click send button
     setTimeout(() => {
-      const sendButton = document.querySelector('button[aria-label="Send message"]') ||
+      const sendButton = document.querySelector('button[aria-label*="Send message"]') ||
+                         document.querySelector('button[aria-label*="Send"]') ||
                          document.querySelector('.send-button') ||
-                         document.querySelector('button[title="Send message"]');
+                         document.querySelector('button[title*="Send"]');
 
       if (sendButton && !sendButton.disabled) {
         sendButton.click();
         resolve();
       } else {
-        // If button not found, try pressing Enter (if it's not a multiline textarea requiring Ctrl+Enter)
-        // Gemini usually uses Ctrl+Enter or a send button for multi-line. We'll try to find the button again.
         console.warn('Send button not immediately found or is disabled. Retrying...');
 
         let retries = 5;
         const retryInterval = setInterval(() => {
-           const btn = document.querySelector('button[aria-label="Send message"]') ||
+           const btn = document.querySelector('button[aria-label*="Send message"]') ||
+                       document.querySelector('button[aria-label*="Send"]') ||
                        document.querySelector('.send-button') ||
-                       document.querySelector('button[title="Send message"]');
+                       document.querySelector('button[title*="Send"]');
+
            if (btn && !btn.disabled) {
               clearInterval(retryInterval);
               btn.click();
               resolve();
            } else if (--retries <= 0) {
               clearInterval(retryInterval);
-              reject(new Error('Could not find or click the send button.'));
+              // Fallback to Enter key
+              chatInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              chatInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              resolve();
            }
         }, 500);
       }
@@ -93,7 +100,7 @@ function pollForResponse() {
   let attempts = 0;
   const maxAttempts = 120; // 60 seconds (500ms * 120)
 
-  const interval = setInterval(() => {
+  pollInterval = setInterval(() => {
     attempts++;
 
     // Look for the "Generating..." indicator. If it's there, keep waiting.
@@ -116,14 +123,16 @@ function pollForResponse() {
          return; // wait a bit more
       }
 
-      clearInterval(interval);
+      clearInterval(pollInterval);
+      pollInterval = null;
       isProcessingPrompt = false;
 
       // Send the response back to background script
       chrome.runtime.sendMessage({ type: 'GEMINI_RESPONSE', text });
 
     } else if (attempts >= maxAttempts) {
-      clearInterval(interval);
+      clearInterval(pollInterval);
+      pollInterval = null;
       isProcessingPrompt = false;
       console.error('Timed out waiting for Gemini response.');
       chrome.runtime.sendMessage({ type: 'GEMINI_RESPONSE', text: '{"action":"done", "reason":"Timeout waiting for AI"}' });

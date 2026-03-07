@@ -288,7 +288,8 @@ function askGemini(tabId, prompt) {
              resolve(null);
            }, 65000);
         } else {
-           log('Failed to send prompt to Gemini UI.', 'error');
+           const errMsg = response && response.error ? response.error : (response && response.status ? response.status : 'Unknown error');
+           log(`Failed to send prompt to Gemini UI: ${errMsg}`, 'error');
            resolve(null);
         }
     };
