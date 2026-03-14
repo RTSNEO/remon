@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Action Validation Test</title>
+<style>
+    body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+    .test-box { border: 1px solid #ccc; padding: 15px; margin: 10px 0; border-radius: 4px; }
+    #scrolltest { height: 100px; width: 300px; overflow-y: auto; border: 1px solid black; }
+    #output { background: #f4f4f4; padding: 10px; white-space: pre-wrap; font-family: monospace; border-left: 4px solid #333; }
+</style>
+<script>
+    // Mock chrome API so content.js doesn't crash
+    window.chrome = {
+        runtime: {
+            onMessage: {
+                addListener: function() {}
+            }
+        }
+    };
+</script>
+</head>
+<body>
+    <h1>Action Validation for content.js</h1>
+    <div id="output">Running tests...
+</div>
+
+    <div class="test-box">
+        <h3>1. Click Test</h3>
+        <button id="btn1" onclick="document.getElementById('output').innerText += '✅ Click test passed: Button clicked!\n'">Click Me</button>
+    </div>
+
+    <div class="test-box">
+        <h3>2. Type text in Input</h3>
+        <input type="text" id="input1" placeholder="Type here">
+    </div>
+
+    <div class="test-box">
+        <h3>3. Type text in ContentEditable</h3>
+        <div id="ce1" contenteditable="true" style="border:1px solid #000; padding:10px; min-height: 20px;"></div>
+    </div>
+
+    <div class="test-box">
+        <h3>4. Select Option</h3>
+        <select id="sel1">
+            <option value="">Select an option</option>
+            <option value="opt1">Option 1</option>
+            <option value="opt2">Option 2</option>
+        </select>
+    </div>
+
+    <div class="test-box">
+        <h3>5. Scroll Test</h3>
+        <div id="scrolltest">
+            <div style="height: 400px; background: linear-gradient(to bottom, #eee, #aaa);">Scrollable content (400px tall)</div>
+        </div>
+    </div>
+
+    <!-- Load the actual content.js -->
+    <script src="./content.js"></script>
+
+    <script>
+        async function runTests() {
+            const out = document.getElementById('output');
+            
+            // Wait for markElements to populate elementMap
+            await new Promise(r => setTimeout(r, 600));
+
+            out.innerText += `elementMap size: ${elementMap.size}\n`;
+            
+            // Find IDs
+            let btnId, inputId, ceId, selId, scrollId;
+            for (let [id, val] of elementMap.entries()) {
+                if (val.el.id === 'btn1') btnId = id;
+                if (val.el.id === 'input1') inputId = id;
+                if (val.el.id === 'ce1') ceId = id;
+                if (val.el.id === 'sel1') selId = id;
+                if (val.el.id === 'scrolltest') scrollId = id;
+            }
+
+            out.innerText += `Mapped IDs - btn:${btnId}, input:${inputId}, ce:${ceId}, sel:${selId}, scroll:${scrollId}\n\n`;
+
+            try {
+                // Test 1: Click
+                if (btnId) {
+                    await executeAction({ action: 'click', id: btnId });
+                }
+                
+                // Test 2: Type in input
+                if (inputId) {
+                    await executeAction({ action: 'type', id: inputId, text: 'Hello World' });
+                    const val = document.getElementById('input1').value;
+                    out.innerText += val === 'Hello World' ? '✅ Type input passed\n' : `❌ Type input failed, got: ${val}\n`;
+                }
+                
+                // Test 3: Type in contenteditable
+                if (ceId) {
+                    await executeAction({ action: 'type', id: ceId, text: 'Hello Div' });
+                    const val = document.getElementById('ce1').innerText;
+                    out.innerText += val.includes('Hello Div') ? '✅ Type contenteditable passed\n' : `❌ Type contenteditable failed, got: ${val}\n`;
+                }
+
+                // Test 4: Select
+                if (selId) {
+                    await executeAction({ action: 'select', id: selId, value: 'Option 2' });
+                    const val = document.getElementById('sel1').value;
+                    out.innerText += val === 'opt2' ? '✅ Select option passed\n' : `❌ Select option failed, got: ${val}\n`;
+                }
+
+                // Test 5: Scroll
+                if (scrollId) {
+                    await executeAction({ action: 'scroll', id: scrollId, direction: 'down' });
+                    // wait a bit for smooth scrolling
+                    await new Promise(r => setTimeout(r, 300));
+                    const st = document.getElementById('scrolltest').scrollTop;
+                    out.innerText += st > 0 ? `✅ Scroll passed (scrollTop: ${st})\n` : `❌ Scroll failed (scrollTop: ${st})\n`;
+                }
+
+                out.innerText += "\n🎉 All tests completed.";
+                
+                // Signal to browser subagent that we're done
+                document.title = "Action Validation Test - DONE";
+            } catch (e) {
+                out.innerText += `\n❌ Error during tests: ${e.message}\n${e.stack}`;
+                document.title = "Action Validation Test - ERROR";
+            }
+        }
+        
+        // Give content.js a moment to mark elements, then run our tests
+        setTimeout(runTests, 1000);
+    </script>
+</body>
+</html>

@@ -4,9 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const stopBtn = document.getElementById('stopBtn');
   const logArea = document.getElementById('logArea');
   const statusText = document.getElementById('statusText');
+  const clearLogsBtn = document.getElementById('clearLogsBtn');
+  const copyLogsBtn = document.getElementById('copyLogsBtn');
 
   // Load previous state
-  chrome.storage.local.get(['isRunning', 'goal', 'logs'], (data) => {
+  chrome.storage.local.get(['isRunning', 'goal', 'logs', 'cvFileName', 'cvContent'], (data) => {
     if (data.goal) goalInput.value = data.goal;
     if (data.isRunning) {
       setRunningState(true);
@@ -15,13 +17,21 @@ document.addEventListener('DOMContentLoaded', () => {
       logArea.innerHTML = data.logs;
       logArea.scrollTop = logArea.scrollHeight;
     }
+    if (data.cvFileName && data.cvContent) {
+      setCvStatus(data.cvFileName, true);
+    }
   });
 
   function log(message, type = 'info') {
     const p = document.createElement('div');
     const time = new Date().toLocaleTimeString();
     p.textContent = `[${time}] ${message}`;
-    p.style.color = type === 'error' ? 'red' : (type === 'action' ? 'green' : 'black');
+    
+    // Use classes for colors to support dark mode
+    if (type === 'error') p.style.color = 'var(--error-red)';
+    else if (type === 'action') p.style.color = 'var(--success-green)';
+    else p.style.color = 'var(--text-color)';
+    
     p.style.marginBottom = '4px';
     logArea.appendChild(p);
     logArea.scrollTop = logArea.scrollHeight;
@@ -35,8 +45,72 @@ document.addEventListener('DOMContentLoaded', () => {
     stopBtn.disabled = !isRunning;
     goalInput.disabled = isRunning;
     statusText.textContent = isRunning ? 'Status: Running...' : 'Status: Idle';
+    statusText.className = isRunning ? 'status running' : 'status';
     chrome.storage.local.set({ isRunning });
   }
+
+  // --- CV Upload ---
+  const cvUploadBtn = document.getElementById('cvUploadBtn');
+  const cvFileInput = document.getElementById('cvFileInput');
+  const cvStatus   = document.getElementById('cvStatus');
+  const cvClearBtn = document.getElementById('cvClearBtn');
+
+  function setCvStatus(filename, loaded) {
+    if (loaded) {
+      cvStatus.textContent = '✔ ' + filename;
+      cvStatus.className = 'loaded';
+      cvClearBtn.style.display = 'block';
+    } else {
+      cvStatus.textContent = 'No file loaded';
+      cvStatus.className = '';
+      cvClearBtn.style.display = 'none';
+    }
+  }
+
+  cvUploadBtn.addEventListener('click', () => {
+    cvFileInput.value = ''; // reset so same file can be re-selected
+    cvFileInput.click();
+  });
+
+  cvFileInput.addEventListener('change', () => {
+    const file = cvFileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    if (file.name.endsWith('.pdf')) {
+      // Store raw PDF as base64 data URL — Gemini's multimodal model can read PDFs natively,
+      // so we upload the actual file as an attachment rather than trying to parse compressed binary.
+      reader.readAsDataURL(file);
+      reader.onload = (e) => {
+        const dataUrl = e.target.result; // "data:application/pdf;base64,..."
+        chrome.storage.local.set({ cvContent: dataUrl, cvFileName: file.name, cvIsPdf: true }, () => {
+          setCvStatus(file.name, true);
+          log(`CV loaded: ${file.name} (PDF — will be sent to Gemini as file attachment)`);
+        });
+      };
+    } else {
+      // Plain text
+      reader.readAsText(file);
+      reader.onload = (e) => {
+        const text = e.target.result.substring(0, 8000);
+        chrome.storage.local.set({ cvContent: text, cvFileName: file.name }, () => {
+          setCvStatus(file.name, true);
+          log(`CV loaded: ${file.name} (${text.length} chars)`);
+        });
+      };
+    }
+
+    reader.onerror = () => log('Failed to read CV file.', 'error');
+  });
+
+  cvClearBtn.addEventListener('click', () => {
+    chrome.storage.local.remove(['cvContent', 'cvFileName'], () => {
+      setCvStatus('', false);
+      log('CV cleared.');
+    });
+  });
+  // --- End CV Upload ---
 
   startBtn.addEventListener('click', () => {
     const goal = goalInput.value.trim();
@@ -71,6 +145,22 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         log('Agent stopped.');
       }
+    });
+  });
+
+  clearLogsBtn.addEventListener('click', () => {
+    logArea.innerHTML = '';
+    chrome.storage.local.set({ logs: '' });
+  });
+
+  copyLogsBtn.addEventListener('click', () => {
+    const textToCopy = Array.from(logArea.children).map(child => child.textContent).join('\n');
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      const originalText = copyLogsBtn.textContent;
+      copyLogsBtn.textContent = 'Copied!';
+      setTimeout(() => { copyLogsBtn.textContent = originalText; }, 2000);
+    }).catch(err => {
+      log(`Failed to copy logs: ${err}`, 'error');
     });
   });
 
