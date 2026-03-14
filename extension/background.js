@@ -660,6 +660,10 @@ function parseGeminiApiStreamingResponse(rawResponse) {
             chunkCount++;
 
             const found = [];
+            if (typeof data === 'object' && data !== null) {
+              found.push(JSON.stringify(data));
+            }
+
             function collectAllStrings(obj, depth = 0) {
               if (depth > 12) return;
               if (typeof obj === 'string' && obj.length > 0) {
