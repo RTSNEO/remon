@@ -147,10 +147,7 @@ async function startExecutionLoop() {
 
       if (targetTab.status === 'loading') {
         log('Target page is still loading. Waiting...', 'info');
-        while (targetTab.status === 'loading' && isRunning) {
-          await sleep(500);
-          try { targetTab = await chrome.tabs.get(targetTabId); } catch (e) { break; }
-        }
+        await waitForTabComplete(targetTabId);
         continue;
       }
 
@@ -810,4 +807,51 @@ function executeAction(tabId, action) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Waits for a tab to finish loading (status === 'complete').
+ * Uses chrome.tabs.onUpdated to avoid inefficient polling.
+ */
+function waitForTabComplete(tabId) {
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      chrome.tabs.onUpdated.removeListener(updatedListener);
+      chrome.tabs.onRemoved.removeListener(removedListener);
+      if (stopCheckInterval) clearInterval(stopCheckInterval);
+    };
+
+    const updatedListener = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const removedListener = (removedTabId) => {
+      if (removedTabId === tabId) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(updatedListener);
+    chrome.tabs.onRemoved.addListener(removedListener);
+
+    // Periodic check for agent stop as a fallback
+    const stopCheckInterval = setInterval(() => {
+      if (!isRunning) {
+        cleanup();
+        resolve();
+      }
+    }, 500);
+
+    // Initial check in case it's already loaded or errored
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab || tab.status === 'complete') {
+        cleanup();
+        resolve();
+      }
+    });
+  });
 }
