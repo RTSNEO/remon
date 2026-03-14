@@ -12,7 +12,9 @@ let currentGeminiTimeout = null;
 // Helper to send logs to sidepanel
 function log(text, level = 'info') {
   console.log(`[${level.toUpperCase()}] ${text}`);
-  chrome.runtime.sendMessage({ type: 'LOG', text, level }).catch(() => { });
+  chrome.runtime.sendMessage({ type: 'LOG', text, level }).catch(() => {
+    /* Ignore error if sidepanel is closed */
+  });
 }
 
 // Ensure Side Panel opens when extension icon is clicked
@@ -115,7 +117,9 @@ async function startExecutionLoop() {
 
       // 1. Force target tab to foreground to un-throttle its JavaScript and extract a clean DOM
       //    (Background tabs fail document.elementFromPoint and visibility checks)
-      await chrome.tabs.update(targetTabId, { active: true }).catch(() => {});
+      await chrome.tabs.update(targetTabId, { active: true }).catch(() => {
+        /* Ignore if tab is already closed */
+      });
       await sleep(1000);
 
       // A. Get Page Context
@@ -184,7 +188,9 @@ async function startExecutionLoop() {
       }
 
       // 3. Clean up the marks instantly so the user doesn't stare at them
-      chrome.tabs.sendMessage(targetTabId, { type: 'UNMARK_ELEMENTS' }).catch(() => {});
+      chrome.tabs.sendMessage(targetTabId, { type: 'UNMARK_ELEMENTS' }).catch(() => {
+        /* Ignore if tab is closed or content script not responding */
+      });
 
       // B. Keep Gemini completely in the background. Generating and messaging work fine intrinsically.
       await sleep(300);
@@ -276,10 +282,14 @@ async function startExecutionLoop() {
 function stopAgent() {
   isRunning = false;
   chrome.storage.local.set({ isRunning: false });
-  chrome.runtime.sendMessage({ type: 'AGENT_STOPPED' }).catch(() => { });
+  chrome.runtime.sendMessage({ type: 'AGENT_STOPPED' }).catch(() => {
+    /* Ignore if sidepanel is closed */
+  });
   // Also notify gemini.js directly so it can kill its stale pollInterval / timeoutId
   if (geminiTabId) {
-    chrome.tabs.sendMessage(geminiTabId, { type: 'AGENT_STOPPED' }).catch(() => {});
+    chrome.tabs.sendMessage(geminiTabId, { type: 'AGENT_STOPPED' }).catch(() => {
+      /* Ignore if Gemini tab is closed */
+    });
   }
   // Cancel any stale background askGemini timeout + listener
   if (currentGeminiTimeout) { clearTimeout(currentGeminiTimeout); currentGeminiTimeout = null; }
@@ -295,7 +305,9 @@ async function ensureGeminiTab(returnTabId) {
     log('Found existing Gemini tab. Reloading...', 'info');
     geminiId = tabs[0].id;
     // Ensure the existing tab is also pinned
-    chrome.tabs.update(geminiId, { active: true, pinned: true }).catch(() => {});
+    chrome.tabs.update(geminiId, { active: true, pinned: true }).catch(() => {
+      /* Ignore if tab is closed */
+    });
     await chrome.tabs.reload(geminiId);
     await sleep(6000); // Wait for it to load
   } else {
@@ -309,7 +321,9 @@ async function ensureGeminiTab(returnTabId) {
 
   // Swap back to target tab
   if (returnTabId) {
-     await chrome.tabs.update(returnTabId, { active: true }).catch(() => {});
+     await chrome.tabs.update(returnTabId, { active: true }).catch(() => {
+       /* Ignore if tab is closed */
+     });
   }
 
   return geminiId;
@@ -492,7 +506,7 @@ async function getGeminiToken(tabId) {
                 const tab = await chrome.tabs.get(tabId);
                 const url = new URL(tab.url);
                 data.sid = url.searchParams.get('f.sid');
-            } catch(e) {}
+            } catch(e) { /* Tab might be closed or URL invalid */ }
         }
         log(`Session params extracted: at=${!!data.at}, bl=${!!data.bl}, sid=${!!data.sid}`, 'info');
         return data;
@@ -630,7 +644,7 @@ function parseGeminiApiStreamingResponse(rawResponse) {
               const candidate = currentStr.substring(0, lastMatch + 1);
               parsed = JSON.parse(candidate);
               currentStr = candidate;
-            } catch (e2) {}
+            } catch (e2) { /* Partial segment still not valid JSON */ }
           }
         }
 
@@ -639,7 +653,8 @@ function parseGeminiApiStreamingResponse(rawResponse) {
           for (const item of toInspect) {
             let data = null;
             if (Array.isArray(item) && item[0] === "wrb.fr" && item[2]) {
-              try { data = JSON.parse(item[2]); } catch (e) {}
+              // wrb.fr payload is often a nested JSON string
+              try { data = JSON.parse(item[2]); } catch (e) { /* Not a JSON string */ }
             } else {
               data = item;
             }
@@ -656,7 +671,7 @@ function parseGeminiApiStreamingResponse(rawResponse) {
                   try {
                     const nested = JSON.parse(obj);
                     collectAllStrings(nested, depth + 1);
-                  } catch (e) {}
+                  } catch (e) { /* Not valid JSON, skip nested parsing */ }
                 }
               } else if (Array.isArray(obj)) {
                 for (const sub of obj) collectAllStrings(sub, depth + 1);
