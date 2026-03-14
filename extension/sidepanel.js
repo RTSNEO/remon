@@ -7,37 +7,54 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearLogsBtn = document.getElementById('clearLogsBtn');
   const copyLogsBtn = document.getElementById('copyLogsBtn');
 
+  let logEntries = [];
+
   // Load previous state
-  chrome.storage.local.get(['isRunning', 'goal', 'logs', 'cvFileName', 'cvContent'], (data) => {
+  chrome.storage.local.get(['isRunning', 'goal', 'logEntries', 'cvFileName', 'cvContent'], (data) => {
     if (data.goal) goalInput.value = data.goal;
     if (data.isRunning) {
       setRunningState(true);
     }
-    if (data.logs) {
-      logArea.innerHTML = data.logs;
-      logArea.scrollTop = logArea.scrollHeight;
+    if (data.logEntries) {
+      logEntries = data.logEntries;
+      reconstructLogs();
     }
     if (data.cvFileName && data.cvContent) {
       setCvStatus(data.cvFileName, true);
     }
   });
 
-  function log(message, type = 'info') {
+  function reconstructLogs() {
+    logArea.innerHTML = '';
+    logEntries.forEach(entry => {
+      renderLogEntry(entry);
+    });
+    logArea.scrollTop = logArea.scrollHeight;
+  }
+
+  function renderLogEntry(entry) {
     const p = document.createElement('div');
-    const time = new Date().toLocaleTimeString();
-    p.textContent = `[${time}] ${message}`;
+    p.textContent = `[${entry.time}] ${entry.message}`;
     
     // Use classes for colors to support dark mode
-    if (type === 'error') p.style.color = 'var(--error-red)';
-    else if (type === 'action') p.style.color = 'var(--success-green)';
+    if (entry.type === 'error') p.style.color = 'var(--error-red)';
+    else if (entry.type === 'action') p.style.color = 'var(--success-green)';
     else p.style.color = 'var(--text-color)';
     
     p.style.marginBottom = '4px';
     logArea.appendChild(p);
+  }
+
+  function log(message, type = 'info') {
+    const time = new Date().toLocaleTimeString();
+    const entry = { message, type, time };
+    logEntries.push(entry);
+
+    renderLogEntry(entry);
     logArea.scrollTop = logArea.scrollHeight;
 
     // Save logs to storage
-    chrome.storage.local.set({ logs: logArea.innerHTML });
+    chrome.storage.local.set({ logEntries });
   }
 
   function setRunningState(isRunning) {
@@ -150,7 +167,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   clearLogsBtn.addEventListener('click', () => {
     logArea.innerHTML = '';
-    chrome.storage.local.set({ logs: '' });
+    logEntries = [];
+    chrome.storage.local.set({ logEntries: [] });
   });
 
   copyLogsBtn.addEventListener('click', () => {
