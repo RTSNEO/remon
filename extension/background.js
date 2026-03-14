@@ -358,21 +358,24 @@ function getPageContext(tabId) {
 }
 
 function buildAntiLoopWarning(recentActions) {
-  if (recentActions.length < 2) return '';
-  
-  const last = recentActions[recentActions.length - 1];
+  if (recentActions.length < 3) return '';
   
   // 1. Consecutive loop (A -> A)
-  const prev = recentActions[recentActions.length - 2];
-  if (last.type === prev.type && last.id === prev.id) {
-     return `\nCRITICAL WARNING: You have repeatedly tried the action "${last.type}" on element ID [${last.id}] without success. DO NOT repeat this action again. You must find a different way to achieve the goal, such as clicking a different button or using the "scroll" or "navigate" actions.`;
-  }
+  const last = recentActions[recentActions.length - 1];
+  const count = recentActions.filter(a => a.type === last.type && a.id === last.id).length;
   
-  // 2. Alternating loop (A -> B -> A)
-  if (recentActions.length >= 3) {
-      const prevPrev = recentActions[recentActions.length - 3];
-      if (last.type === prevPrev.type && last.id === prevPrev.id) {
-          return `\nWARNING: You are in an alternating loop (interacting with element [${last.id}] repeatedly). STOP this loop. If you are toggling a filter like "Easy Apply", it is likely already active. Look for "(ACTIVE)" status in the element map. DO NOT click active filters unless your goal is to de-select them.`;
+  if (count >= 3) {
+      return `\nCRITICAL WARNING: You have interacted with element ID [${last.id}] ${count} times recently. STOP. If the page isn't changing, the action is likely already applied or NOT working. If you are clicking a sidebar menu item, check if it's already highlighted. DO NOT repeat the same action again. Try scrolling or navigating to a different URL (e.g. searching again).`;
+  }
+
+  // 2. Sequence loop (A, B -> A, B)
+  if (recentActions.length >= 4) {
+      const a1 = recentActions[recentActions.length - 4];
+      const b1 = recentActions[recentActions.length - 3];
+      const a2 = recentActions[recentActions.length - 2];
+      const b2 = recentActions[recentActions.length - 1];
+      if (a1.id === a2.id && b1.id === b2.id && a1.type === a2.type && b1.type === b2.type) {
+          return `\nWARNING: You are in a repeating sequence loop (Alternating between [${a1.id}] and [${b1.id}]). STOP THIS LOOP. Look at the page state more carefully. One of these buttons might already be "(ACTIVE)".`;
       }
   }
   
@@ -413,6 +416,7 @@ Rules:
 - If you see a "Save this application?" or similar save-warning dialog, ALWAYS click "Save" or "Continue" — NEVER "Discard" or the × close button.
 - If the only visible buttons are Dismiss/Discard/Cancel and you cannot proceed, use {"action": "scroll", "direction": "down"} to reveal the real Submit button, then click it.
 - **NEVER** use the "navigate" action to leave the current website or go to alternative job boards (like Bayt, Indeed, etc.) during an active application. If you don't see the form, it is simply loading. Reply with an empty list \`{"actions": []}\` to wait for the next cycle.
+- **NEVER** use a "key" action. If you want to press Enter, append \\n to the end of your string in a "type" action.
 
 Example:
 {"actions": [
@@ -440,6 +444,7 @@ Available actions: click, type, select, scroll, navigate, done.
 Reply with ONLY a JSON object: {"actions": [{"action": "click", "id": 123}, ...]}
 
 IMPORTANT: If an element is marked "(ACTIVE)", it is already selected. Clicking it again will TOGGLE IT OFF. Do not click active filters unless you want to remove them.
+DO NOT use the "key" action. Use \\n in a "type" action for Enter.
 
 Current Webpage Map:
 ---
@@ -593,60 +598,85 @@ function parseGeminiApiStreamingResponse(rawResponse) {
   let allTextChunks = [];
 
   try {
-    // 1. Split into envelope segments
-    const segments = rawResponse.split(/\r?\n\d+\r?\n/);
+    // 1. Split into envelope segments (Gemini uses \nLength\n format or similar)
+    const segments = rawResponse.split(/\r?\n\d+\r?\n|\r?\n\r?\n/);
     for (let segment of segments) {
       segment = segment.trim();
-      // Remove leading length if it exists (some chunks have it)
-      segment = segment.replace(/^\d+\r?\n/, '');
-      
-      if (!segment || !segment.startsWith('[')) continue;
-      
-      try {
-        const parsed = JSON.parse(segment);
-        if (!Array.isArray(parsed)) continue;
+      if (!segment) continue;
 
-        for (const item of parsed) {
-          // Look for 'wrb.fr' which contains the response data
-          if (item[0] === "wrb.fr" && item[2]) {
-            const innerRaw = JSON.parse(item[2]);
-            if (!Array.isArray(innerRaw)) continue;
-            
-            chunkCount++;
+      // A segment might contain multiple JSON blocks or leading length/junk.
+      let searchIdx = 0;
+      while (searchIdx < segment.length) {
+        const jsonStart = segment.indexOf('[', searchIdx);
+        const objStart = segment.indexOf('{', searchIdx);
+        let start = -1;
+        if (jsonStart !== -1 && objStart !== -1) start = Math.min(jsonStart, objStart);
+        else if (jsonStart !== -1) start = jsonStart;
+        else if (objStart !== -1) start = objStart;
 
-            // Collect ALL strings from every depth of the array, then pick best.
-            // IMPORTANT: We cannot return the first string found because early
-            // strings are session/conversation IDs (e.g. "c_a8ace8b3ce9331e3").
-            function collectAllStrings(obj, results) {
-                if (typeof obj === 'string' && obj.length > 0) {
-                    results.push(obj);
-                } else if (Array.isArray(obj)) {
-                    for (const sub of obj) collectAllStrings(sub, results);
-                }
+        if (start === -1) break;
+
+        let parsed = null;
+        let currentStr = segment.substring(start);
+        try {
+          parsed = JSON.parse(currentStr);
+        } catch (e) {
+          // Attempt to find the last valid JSON boundary if the whole segment is not valid
+          const lastBracket = currentStr.lastIndexOf(']');
+          const lastBrace = currentStr.lastIndexOf('}');
+          const lastMatch = Math.max(lastBracket, lastBrace);
+          if (lastMatch !== -1) {
+            try {
+              const candidate = currentStr.substring(0, lastMatch + 1);
+              parsed = JSON.parse(candidate);
+              currentStr = candidate;
+            } catch (e2) {}
+          }
+        }
+
+        if (parsed) {
+          const toInspect = Array.isArray(parsed) ? parsed : [parsed];
+          for (const item of toInspect) {
+            let data = null;
+            if (Array.isArray(item) && item[0] === "wrb.fr" && item[2]) {
+              try { data = JSON.parse(item[2]); } catch (e) {}
+            } else {
+              data = item;
             }
 
+            if (!data) continue;
+            chunkCount++;
+
             const found = [];
-            collectAllStrings(innerRaw, found);
+            function collectAllStrings(obj, depth = 0) {
+              if (depth > 12) return;
+              if (typeof obj === 'string' && obj.length > 0) {
+                found.push(obj);
+                if (obj.includes('{') || obj.startsWith('[')) {
+                  try {
+                    const nested = JSON.parse(obj);
+                    collectAllStrings(nested, depth + 1);
+                  } catch (e) {}
+                }
+              } else if (Array.isArray(obj)) {
+                for (const sub of obj) collectAllStrings(sub, depth + 1);
+              } else if (typeof obj === 'object' && obj !== null) {
+                for (const key in obj) collectAllStrings(obj[key], depth + 1);
+              }
+            }
+            collectAllStrings(data);
 
-            // Log top-3 strings so we can debug the structure in devtools
-            const top3 = [...found].sort((a,b) => b.length - a.length).slice(0, 3);
-            console.debug('[API parse] chunk strings (longest 3):', top3.map(s => s.substring(0, 100)));
-
-            // Pick the best candidate string:
-            // 1. Prefer strings that look like JSON action blocks (contain "action")
-            // 2. Fall back to the longest string containing '{' and of meaningful length
-            // 3. Final fallback: longest string overall (ignoring short IDs < 30 chars)
             const jsonLike = found.filter(s => s.includes('"action"'));
             const jsonFallback = found.filter(s => s.includes('{') && s.length > 30);
             const substantial = found.filter(s => s.length > 30);
 
             const best = jsonLike.length > 0
-                ? jsonLike.reduce((a, b) => b.length > a.length ? b : a)
-                : jsonFallback.length > 0
-                    ? jsonFallback.reduce((a, b) => b.length > a.length ? b : a)
-                    : substantial.length > 0
-                        ? substantial.reduce((a, b) => b.length > a.length ? b : a)
-                        : '';
+              ? jsonLike.reduce((a, b) => b.length > a.length ? b : a)
+              : jsonFallback.length > 0
+                ? jsonFallback.reduce((a, b) => b.length > a.length ? b : a)
+                : substantial.length > 0
+                  ? substantial.reduce((a, b) => b.length > a.length ? b : a)
+                  : '';
 
             if (best) {
               allTextChunks.push(best);
@@ -655,21 +685,19 @@ function parseGeminiApiStreamingResponse(rawResponse) {
               }
             }
           }
+          searchIdx = start + currentStr.length;
+        } else {
+          searchIdx = start + 1;
         }
-      } catch (e) {}
+      }
     }
 
-    // 2. If no JSON-like chunk was found but we found text, use the longest one
     if (!finalText && allTextChunks.length > 0) {
-        allTextChunks.sort((a, b) => b.length - a.length);
-        finalText = allTextChunks[0];
+      allTextChunks.sort((a, b) => b.length - a.length);
+      finalText = allTextChunks[0];
     }
-
-    if (finalText === "" && chunkCount > 0) {
-        log(`API Parsing: Found ${chunkCount} chunks but none matched criteria. Raw snippet: ${rawResponse.substring(0, 300)}`, 'warn');
-    }
-  } catch (e) {
-    console.warn("Error parsing API response", e);
+  } catch (error) {
+    console.warn("Error in parseGeminiApiStreamingResponse", error);
   }
   return finalText;
 }

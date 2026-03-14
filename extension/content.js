@@ -209,7 +209,21 @@
         const tagName = el.tagName.toLowerCase();
         const role = el.getAttribute('role');
         const isChecked = el.checked || el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-pressed') === 'true';
-        const isActive = el.classList.contains('active') || el.classList.contains('selected') || el.classList.contains('is-active');
+        
+        // Broaden active/selected detection: check for specific classes or attributes
+        const classStr = (typeof el.className === 'string' ? el.className.toLowerCase() : '');
+        const isActive = el.classList.contains('active') || 
+                         el.classList.contains('selected') || 
+                         el.classList.contains('is-active') ||
+                         el.classList.contains('current') ||
+                         el.classList.contains('artdeco-button--active') ||
+                         el.classList.contains('artdeco-pill--active') ||
+                         el.classList.contains('nav-item--active') ||
+                         classStr.includes('--active') ||
+                         classStr.includes('__active') ||
+                         el.getAttribute('aria-current') === 'page' ||
+                         el.getAttribute('aria-current') === 'true' ||
+                         el.getAttribute('aria-selected') === 'true';
 
         let label = '';
         if (tagName === 'select') {
@@ -451,7 +465,13 @@
         el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
 
         if (el.tagName.toLowerCase() === 'input' && el.closest('form')) {
-          try { el.closest('form').submit(); } catch(e) {}
+          try { 
+              if (el.closest('form').requestSubmit) {
+                  el.closest('form').requestSubmit();
+              } else {
+                  el.closest('form').submit(); 
+              }
+          } catch(e) {}
         }
       }
     } else if (type === 'select' && (action.option !== undefined || action.value !== undefined)) {
@@ -490,6 +510,22 @@
       el.dispatchEvent(new Event('change', { bubbles: true }));
       el.dispatchEvent(new Event('input', { bubbles: true }));
 
+    } else if (type === 'key') {
+      const key = action.key || 'Enter';
+      el.focus();
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: key, code: key, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keypress', { key: key, code: key, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { key: key, code: key, bubbles: true }));
+      
+      if (key === 'Enter' && el.tagName.toLowerCase() === 'input' && el.closest('form')) {
+          try { 
+              if (el.closest('form').requestSubmit) {
+                  el.closest('form').requestSubmit();
+              } else {
+                  el.closest('form').submit(); 
+              }
+          } catch(e) {}
+      }
     } else {
       throw new Error(`Unknown action type: ${type}`);
     }

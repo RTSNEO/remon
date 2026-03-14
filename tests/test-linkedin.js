@@ -27,25 +27,12 @@ const path = require('path');
     });
 
     console.log('Navigating to LinkedIn Jobs...');
-    await page.goto('https://www.linkedin.com/jobs/', { waitUntil: 'networkidle' });
+    await page.goto('https://www.linkedin.com/jobs/', { waitUntil: 'load' });
 
     console.log('Page loaded. Wait a moment for dynamic elements...');
     await page.waitForTimeout(3000);
 
-    console.log('Evaluating content.js extractContext()...');
-    
-    // The content.js is injected automatically by manifest.json on <all_urls>
-    // We can evaluate in the page context to test if the elements map properly
-    const result = await page.evaluate(async () => {
-        return new Promise((resolve) => {
-            // Send a message as if the background script asked for context
-            chrome.runtime.sendMessage(
-                "kfjlkdj" // not needed, we can just dispatch custom event or use window postmessage if we injected a bridge, 
-                // but better yet, let's just run the code directly or use chrome.runtime.sendMessage equivalent if available in page context? No, page context doesn't have chrome.runtime.
-            );
-            resolve("Done");
-        });
-    });
+    // Removed failing page.evaluate block
 
     // Instead of the above, let's just evaluate the extractContext locally to see if it throws error
     // because content.js is in an isolated world, we can't easily call it. 
