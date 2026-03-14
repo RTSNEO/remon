@@ -6,12 +6,15 @@
   "permissions": [
     "sidePanel",
     "tabs",
+    "activeTab",
     "scripting",
     "storage",
-    "activeTab"
+    "offscreen"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "*://*.google.com/*",
+    "*://gemini.google.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,7 +24,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://gemini.google.com/app*"],
+      "matches": ["*://gemini.google.com/*"],
       "js": ["gemini.js"],
       "run_at": "document_idle"
     },

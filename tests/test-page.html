@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page</title>
+    <style>
+        .artdeco-button--active { font-weight: bold; color: blue; }
+    </style>
+</head>
+<body>
+    <button id="active-btn" class="artdeco-button--active">Jobs (Active)</button>
+    <button id="normal-btn">Network</button>
+    
+    <form id="test-form" onsubmit="event.preventDefault(); document.getElementById('form-result').innerText += ' Submitted!';">
+        <input type="text" id="test-input" placeholder="Type here">
+    </form>
+    <div id="form-result"></div>
+
+    <script>
+        const input = document.getElementById('test-input');
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('form-result').innerText += ' (Enter Key Pressed)';
+            }
+        });
+    </script>
+</body>
+</html>

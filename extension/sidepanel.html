@@ -3,26 +3,99 @@
 <head>
   <title>Gemini Auto Browser</title>
   <style>
+    :root {
+      --bg-color: #f8f9fa;
+      --text-color: #202124;
+      --card-bg: white;
+      --border-color: #dadce0;
+      --secondary-text: #5f6368;
+      --primary-blue: #1a73e8;
+      --primary-blue-light: #e8f0fe;
+      --primary-blue-hover: #d2e3fc;
+      --error-red: #d93025;
+      --error-red-bg: #f28b82;
+      --success-green: #188038;
+      --btn-secondary-bg: #e8eaed;
+      --btn-secondary-text: #3c4043;
+      --btn-secondary-hover: #f1f3f4;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #202124;
+        --text-color: #e8eaed;
+        --card-bg: #292a2d;
+        --border-color: #3c4043;
+        --secondary-text: #9aa0a6;
+        --primary-blue: #8ab4f8;
+        --primary-blue-light: #3c4043;
+        --primary-blue-hover: #5f6368;
+        --error-red: #f28b82;
+        --error-red-bg: #d93025;
+        --success-green: #81c995;
+        --btn-secondary-bg: #3c4043;
+        --btn-secondary-text: #e8eaed;
+        --btn-secondary-hover: #4a4d51;
+      }
+    }
+
     body {
-      font-family: sans-serif;
-      padding: 10px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 12px;
       margin: 0;
-      background-color: #f8f9fa;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      transition: background-color 0.3s, color 0.3s;
     }
     h2 {
-      font-size: 16px;
+      font-size: 18px;
       margin-top: 0;
-      color: #202124;
+      color: var(--text-color);
+      border-bottom: 2px solid var(--primary-blue);
+      padding-bottom: 8px;
     }
     textarea {
       width: 100%;
-      height: 80px;
+      height: 90px;
       box-sizing: border-box;
-      margin-bottom: 10px;
-      padding: 8px;
-      border: 1px solid #dadce0;
-      border-radius: 4px;
+      margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
       resize: vertical;
+      background-color: var(--card-bg);
+      color: var(--text-color);
+      font-size: 13px;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 15px;
+      margin-bottom: 8px;
+    }
+    .log-header h3 {
+      margin: 0;
+      font-size: 14px;
+      color: var(--secondary-text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .log-controls {
+      display: flex;
+      gap: 5px;
+    }
+    .small-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      background-color: var(--btn-secondary-bg);
+      color: var(--btn-secondary-text);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .small-btn:hover {
+      background-color: var(--btn-secondary-hover);
     }
     .button-group {
       display: flex;
@@ -31,45 +104,127 @@
     }
     button {
       flex: 1;
-      padding: 8px 16px;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    #startBtn {
+      background-color: var(--primary-blue);
+      color: white;
+    }
+    #startBtn:disabled {
+      background-color: var(--border-color);
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    #stopBtn {
+      background-color: var(--error-red);
+      color: white;
+    }
+    #stopBtn:disabled {
+      background-color: var(--border-color);
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    #logArea {
+      width: 100%;
+      height: 220px;
+      box-sizing: border-box;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: var(--card-bg);
+      overflow-y: auto;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      color: var(--text-color);
+    }
+    .status {
+      font-size: 13px;
+      margin-bottom: 12px;
+      color: var(--secondary-text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #ccc;
+    }
+    .status.running::before {
+      background-color: #34a853;
+      box-shadow: 0 0 5px #34a853;
+    }
+    /* File Upload Section */
+    .cv-section {
+      margin-bottom: 15px;
+      padding: 10px;
+      background-color: var(--primary-blue-light);
+      border-radius: 6px;
+      border-left: 4px solid var(--primary-blue);
+    }
+    .cv-section label {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--primary-blue);
+      display: block;
+      margin-bottom: 8px;
+    }
+    .cv-upload-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #cvUploadBtn {
+      padding: 6px 12px;
+      font-size: 12px;
+      background-color: var(--primary-blue);
+      color: white;
       border: none;
       border-radius: 4px;
       cursor: pointer;
       font-weight: bold;
+      flex: none;
     }
-    #startBtn {
-      background-color: #1a73e8;
-      color: white;
+    #cvUploadBtn:hover {
+      opacity: 0.9;
     }
-    #startBtn:disabled {
-      background-color: #8ab4f8;
-      cursor: not-allowed;
+    #cvFileInput {
+      display: none;
     }
-    #stopBtn {
-      background-color: #d93025;
-      color: white;
+    #cvStatus {
+      font-size: 12px;
+      color: var(--secondary-text);
+      flex: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
-    #stopBtn:disabled {
-      background-color: #f28b82;
-      cursor: not-allowed;
+    #cvStatus.loaded {
+      color: var(--success-green);
+      font-weight: bold;
     }
-    #logArea {
-      width: 100%;
-      height: 200px;
-      box-sizing: border-box;
-      padding: 8px;
-      border: 1px solid #dadce0;
+    #cvClearBtn {
+      padding: 3px 8px;
+      font-size: 11px;
+      background: var(--btn-secondary-bg);
+      border: 1px solid var(--border-color);
       border-radius: 4px;
-      background-color: white;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-    }
-    .status {
-      font-size: 12px;
-      margin-bottom: 10px;
-      color: #5f6368;
+      cursor: pointer;
+      color: var(--error-red);
+      display: none;
+      flex: none;
     }
   </style>
 </head>
@@ -80,12 +235,29 @@
 
   <textarea id="goalInput" placeholder="Enter your goal (e.g., 'Find and apply for software engineering jobs on LinkedIn')"></textarea>
 
+  <!-- File Upload / CV -->
+  <div class="cv-section">
+    <label>📄 Supporting Document (CV / Resume)</label>
+    <div class="cv-upload-area">
+      <button id="cvUploadBtn">📎 File upload</button>
+      <input type="file" id="cvFileInput" accept=".txt,.pdf">
+      <span id="cvStatus">No file loaded</span>
+      <button id="cvClearBtn">✕</button>
+    </div>
+  </div>
+
   <div class="button-group">
     <button id="startBtn">Start</button>
     <button id="stopBtn" disabled>Stop</button>
   </div>
 
-  <h3>Action Log</h3>
+  <div class="log-header">
+    <h3>Action Log</h3>
+    <div class="log-controls">
+      <button id="copyLogsBtn" class="small-btn">Copy</button>
+      <button id="clearLogsBtn" class="small-btn">Clear</button>
+    </div>
+  </div>
   <div id="logArea"></div>
 
   <script src="sidepanel.js"></script>
