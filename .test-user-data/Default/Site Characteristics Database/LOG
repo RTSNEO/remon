@@ -1,2 +1,3 @@
-2026/03/14-23:17:01.362 7394 Creating DB D:\Users\remon.asaad\Downloads\Github\remon\.test-user-data\Default\Site Characteristics Database since it was missing.
-2026/03/14-23:17:01.366 7394 Reusing MANIFEST D:\Users\remon.asaad\Downloads\Github\remon\.test-user-data\Default\Site Characteristics Database/MANIFEST-000001
+2026/03/14-23:23:19.829 35c8 Reusing MANIFEST D:\Users\remon.asaad\Downloads\Github\remon\.test-user-data\Default\Site Characteristics Database/MANIFEST-000001
+2026/03/14-23:23:19.830 35c8 Recovering log #3
+2026/03/14-23:23:19.830 35c8 Reusing old log D:\Users\remon.asaad\Downloads\Github\remon\.test-user-data\Default\Site Characteristics Database/000003.log 
