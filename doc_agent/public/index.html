@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITS Document AI Agent</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-robot"></i> ITS Document AI Agent</h1>
+            <p>Automated standard-compliant document generation via Custom Gemini</p>
+        </header>
+
+        <main>
+            <!-- Step 1: Configuration -->
+            <section id="config-section" class="card active">
+                <h2>1. Project Configuration</h2>
+                <form id="config-form">
+                    <div class="form-group">
+                        <label for="customGemUrl">Custom Gem URL (must include source documents)</label>
+                        <input type="url" id="customGemUrl" required placeholder="https://gemini.google.com/gem/your-custom-gem-id">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="docType">Document Type</label>
+                            <select id="docType" required>
+                                <option value="SRD">System Requirements Document (SRD)</option>
+                                <option value="HLD">High-Level Design (HLD)</option>
+                                <option value="LLD">Low-Level Design (LLD)</option>
+                                <option value="ConOps">Concept of Operations (ConOps)</option>
+                            </select>
+                        </div>
+                        <div class="form-group half">
+                            <label for="standards">Compliance Standard</label>
+                            <input type="text" id="standards" value="ISO 14813" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="additionalInstructions">Additional Instructions / Focus Areas (Optional)</label>
+                        <textarea id="additionalInstructions" rows="3" placeholder="E.g., Focus heavily on cybersecurity constraints for the tolling subsystem."></textarea>
+                    </div>
+
+                    <button type="submit" id="btn-generate-outline" class="btn primary">
+                        <i class="fas fa-list"></i> Generate Initial Outline
+                    </button>
+                </form>
+            </section>
+
+            <!-- Status and Progress Area (always visible during processing) -->
+            <section id="status-section" class="card hidden">
+                <div class="status-header">
+                    <h3><i class="fas fa-spinner fa-spin"></i> Status Update</h3>
+                    <span id="progress-text">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+                <div id="status-log" class="status-log"></div>
+            </section>
+
+            <!-- Step 2: Outline Review -->
+            <section id="outline-section" class="card hidden">
+                <h2>2. Review & Approve Outline</h2>
+                <p>The AI generated the following structure. Please review, edit, or reorganize it before generating the full 500-page document.</p>
+                <div class="form-group">
+                    <textarea id="approvedOutline" rows="15"></textarea>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="includeRtm" checked>
+                    <label for="includeRtm">Automatically generate Requirement Traceability Matrix (RTM) cross-referencing source data at the end.</label>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="btn-back-to-config" class="btn secondary">Back</button>
+                    <button id="btn-generate-full" class="btn primary">
+                        <i class="fas fa-file-word"></i> Generate Full Document
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 3: Success & Download -->
+            <section id="success-section" class="card hidden">
+                <h2><i class="fas fa-check-circle" style="color: #4CAF50;"></i> Generation Complete</h2>
+                <p>Your document has been successfully compiled and formatted.</p>
+                <div class="action-buttons center">
+                    <a id="download-link" href="#" class="btn primary large">
+                        <i class="fas fa-download"></i> Download Word Document (.docx)
+                    </a>
+                    <button id="btn-start-over" class="btn secondary">Start New Document</button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
