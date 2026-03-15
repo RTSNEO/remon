@@ -12,12 +12,13 @@ def extract_requirements(input_dir: str, regex_pattern: str = r"\[REQ-ITS-\d{3,4
     requirements = {}
     
     md_files = glob.glob(os.path.join(input_dir, "*.md"))
+    compiled_regex = re.compile(regex_pattern)
     for file_path in md_files:
         section_name = os.path.basename(file_path)
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
             # Find all instances of the pattern
-            matches = re.findall(regex_pattern, content)
+            matches = compiled_regex.findall(content)
             
             # Deduplicate per file
             for match in set(matches):
@@ -41,12 +42,13 @@ def update_rtm_with_design(rtm_data: dict, design_dir: str, design_type: str, re
     """
     print(f"Scanning {design_type} documents in {design_dir} for traceability...")
     md_files = glob.glob(os.path.join(design_dir, "*.md"))
+    compiled_regex = re.compile(regex_pattern)
     
     for file_path in md_files:
         section_name = os.path.basename(file_path)
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-            matches = re.findall(regex_pattern, content)
+            matches = compiled_regex.findall(content)
             
             for match in set(matches):
                 if match in rtm_data:
