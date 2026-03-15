@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 import msal
 import imaplib
-import email
 
 load_dotenv()
 
