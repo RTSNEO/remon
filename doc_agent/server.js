@@ -190,9 +190,22 @@ app.post('/api/generate-document', async (req, res) => {
 
 // 3. Endpoint: Download the generated Word doc
 app.get('/api/download/:filename', (req, res) => {
-    const filePath = path.join(downloadsDir, req.params.filename);
-    if (fs.existsSync(filePath)) {
-        res.download(filePath);
+    // Sanitize the filename to prevent path traversal vulnerabilities
+    const safeFilename = path.basename(req.params.filename);
+
+    // Reject filenames that could still evaluate to traversal segments like '.' or '..'
+    if (safeFilename === '.' || safeFilename === '..') {
+        return res.status(400).json({ error: 'Invalid filename.' });
+    }
+
+    const filePath = path.join(downloadsDir, safeFilename);
+
+    // Ensure the resolved path is actually within the downloads directory
+    const resolvedFilePath = path.resolve(filePath);
+    const resolvedDownloadsDir = path.resolve(downloadsDir);
+
+    if (resolvedFilePath.startsWith(resolvedDownloadsDir + path.sep) && fs.existsSync(resolvedFilePath)) {
+        res.download(resolvedFilePath);
     } else {
         res.status(404).json({ error: 'File not found.' });
     }
