@@ -35,9 +35,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// Helper function to send status updates
+// --- Utility to broadcast status ---
 function updateStatus(message, type = 'info', progress = null) {
-  io.emit('statusUpdate', { message, type, progress });
+  const statusObj = { message, type, progress, timestamp: new Date() };
+  io.emit('status-update', statusObj);
+  console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
 // 1. Endpoint: Connect & Generate Initial Outline
@@ -197,6 +199,11 @@ app.get('/api/download/:filename', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Server running on port ${PORT} at http://127.0.0.1:${PORT}`);
-});
+
+if (require.main === module) {
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`Server running on port ${PORT} at http://127.0.0.1:${PORT}`);
+  });
+}
+
+module.exports = { app, server, io, updateStatus };
