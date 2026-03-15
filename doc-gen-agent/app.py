@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import sys
 import time
+import uuid
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Ensure the 'src' directory is in the python path for imports
@@ -48,13 +50,21 @@ with st.sidebar:
                 with st.spinner("Uploading files and creating context cache..."):
                     gemini_files = []
                     for uploaded_file in uploaded_files:
-                        temp_path = os.path.join("uploads", uploaded_file.name)
-                        with open(temp_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
-                        
-                        g_file = upload_document(client, temp_path)
-                        gemini_files.append(g_file)
-                        st.success(f"Uploaded: {uploaded_file.name} (Type: {g_file.mime_type})")
+                        # Sanitize filename by using a UUID for local storage
+                        # while preserving the original extension.
+                        safe_filename = f"{uuid.uuid4()}{Path(uploaded_file.name).suffix}"
+                        temp_path = os.path.join("uploads", safe_filename)
+                        try:
+                            with open(temp_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+
+                            g_file = upload_document(client, temp_path, display_name=uploaded_file.name)
+                            gemini_files.append(g_file)
+                            st.success(f"Uploaded: {uploaded_file.name} (Type: {g_file.mime_type})")
+                        finally:
+                            # Clean up the temporary file
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
                     
                     st.session_state.uploaded_gemini_files = gemini_files
                     cache = create_context_cache(client, gemini_files)
